@@ -18,7 +18,6 @@ namespace HoloFastDepth
         
         public int CropHeight = 1024;
 
-
         public string FastDepthOnnxModel;
 
         // TODO ちゃんと合わせる
@@ -27,35 +26,77 @@ namespace HoloFastDepth
         // TODO: PhotoCaptureは他のクラスに切り出した方が良いかも
         private PhotoCapture photoCapture;
 
+        private CameraParameters cameraParameters;
+
         private IDepthEstimator depthEstimator;
 
         private Texture2D targetTexture;
         private Texture2D inputTexture;
         private Texture2D depthTexture;
+
+        private Vector2[,] screenPos;
         
         private float[] inputTensor;
         private int[] triangles;
+        private Vector3[] vertices;
  
         
         // Use this for initialization
         void Start () {
             // DepthEstimator のセットアップ
+            
             // TODO: factory等にまとめた方がよさそう
 #if UNITY_UWP
-		    depthEstimator = new FastDepthEstimator(FastDepthOnnxModel);
+            depthEstimator = new FastDepthEstimator(FastDepthOnnxModel);
 #else
             depthEstimator = new DummyDepthEstimator();
 #endif
-            
+ 
+            // カメラパラメータの取得
+            var cameraResolution = PhotoCapture.SupportedResolutions.OrderByDescending(res => res.width * res.height).First();
+            cameraParameters = new CameraParameters
+            {
+                hologramOpacity = 0.0f,
+                cameraResolutionWidth = cameraResolution.width,
+                cameraResolutionHeight = cameraResolution.height,
+                pixelFormat = CapturePixelFormat.BGRA32,
+            };
+            Debug.Log(string.Format("Camera[width:{0}, height:{1}]",
+            cameraParameters.cameraResolutionWidth, cameraParameters.cameraResolutionHeight));
+
+            // バッファの確保
             inputTensor = new float[depthEstimator.InputHeight * depthEstimator.InputWidth * 3];
             
             inputTexture = new Texture2D(
                 depthEstimator.InputWidth, depthEstimator.InputHeight, TextureFormat.RGB24, false);
             depthTexture = new Texture2D(
                 depthEstimator.InputWidth, depthEstimator.InputHeight, TextureFormat.RGB24, false);
-            // 
-
+            
+            //  
             triangles = ImageUtil.MakeTriangles(depthEstimator.InputWidth, depthEstimator.InputHeight);
+            vertices = new Vector3[depthEstimator.InputWidth * depthEstimator.InputHeight];
+            Debug.Log(string.Format("num mertices: {0} ", vertices.Length));
+            
+            Debug.Log("Alloc texture buffer.");
+            targetTexture = new Texture2D(cameraParameters.cameraResolutionWidth, cameraParameters.cameraResolutionHeight);
+            CropWidth = Math.Min(CropWidth, cameraParameters.cameraResolutionWidth);
+            CropHeight = Math.Min(CropHeight, cameraParameters.cameraResolutionHeight);
+                
+            var srcSize = new Vector2(targetTexture.width, targetTexture.height);
+            var srcRoi = new Rect(targetTexture.width / 2 - CropWidth / 2, targetTexture.height / 2 - CropHeight / 2, CropWidth, CropHeight);
+            var destSize = new Vector2(depthEstimator.InputWidth, depthEstimator.InputHeight);
+                
+            // テンソル => スクリーン座標 をあらかじめ計算しておく
+            screenPos = new Vector2[depthEstimator.InputHeight, depthEstimator.InputWidth];
+            for (var y = 0; y < depthEstimator.InputHeight; ++y)
+            {
+                for (var x = 0; x < depthEstimator.InputWidth; ++x)
+                {
+                    var invY = depthEstimator.InputHeight - y - 1;
+                    CalcSrcPos(srcSize, srcRoi, destSize, x, invY,
+                        out screenPos[y, x].x, out screenPos[y, x].y);
+                }
+            }
             
             // 何も無い場所をエアタップできるように GlobalListener へ登録
             InputManager.Instance.AddGlobalListener(gameObject);
@@ -72,26 +113,7 @@ namespace HoloFastDepth
             Debug.Log("OnInputClicked");
             PhotoCapture.CreateAsync(false, captureObject =>
             {
-                photoCapture = captureObject;
-
-                var cameraResolution = PhotoCapture.SupportedResolutions.OrderByDescending(res => res.width * res.height).First();
-                var cameraParameters = new CameraParameters
-                {
-                    hologramOpacity = 0.0f,
-                    cameraResolutionWidth = cameraResolution.width,
-                    cameraResolutionHeight = cameraResolution.height,
-                    pixelFormat = CapturePixelFormat.BGRA32,
-                };
-                Debug.Log(string.Format("Camera[width:{0}, height:{1}]", cameraResolution.width, cameraResolution.height));
-                if (targetTexture == null)
-                {
-                    Debug.Log("Alloc texture buffer.");
-                    targetTexture = new Texture2D(cameraResolution.width, cameraResolution.height);
-                    CropWidth = Math.Min(CropWidth, cameraResolution.width);
-                    CropHeight = Math.Min(CropHeight, cameraResolution.height);
-
-                }
-                
+                photoCapture = captureObject;         
                 photoCapture.StartPhotoModeAsync(cameraParameters, result =>
                 {
                     photoCapture.TakePhotoAsync(OnCapturedPhotoToMemory);
@@ -111,10 +133,6 @@ namespace HoloFastDepth
 
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
-
-            var srcSize = new Vector2(targetTexture.width, targetTexture.height);
-            var srcRoi = new Rect(targetTexture.width / 2 - CropWidth / 2, targetTexture.height / 2 - CropHeight / 2, CropWidth, CropHeight);
-            var destSize = new Vector2(depthEstimator.InputWidth, depthEstimator.InputHeight);
             
             // キャプチャした画像を中心から指定サイズで切り抜き、入力用のテンソルを作成
             for (var y = 0 ; y < depthEstimator.InputHeight; ++y)
@@ -123,10 +141,8 @@ namespace HoloFastDepth
                 {
                     var invY = depthEstimator.InputHeight - y - 1;
                     
-                    float u, v;
-                    CalcSrcPos(srcSize, srcRoi, destSize, x, invY, out u, out v); // TODO 事前に計算できる
                     //Debug.Log(string.Format("sx, sy: {0}, {1}", sx, sy));
-                    var color = targetTexture.GetPixelBilinear(u, v);
+                    var color = targetTexture.GetPixelBilinear(screenPos[y, x].x, screenPos[y, x].y);
                     inputTexture.SetPixel(x, invY, color);
 
                     inputTensor[
@@ -153,9 +169,6 @@ namespace HoloFastDepth
             Matrix4x4 camToWorldMatrix, projMatrix;
             photoCaptureFrame.TryGetCameraToWorldMatrix(out camToWorldMatrix);
             photoCaptureFrame.TryGetProjectionMatrix(out projMatrix);
-            
-            var vertices = new Vector3[depthEstimator.InputWidth * depthEstimator.InputHeight];
-            Debug.Log(string.Format("num mertices: {0} ", vertices.Length));
 
             var min = depth.Min();
             var max = depth.Max();
@@ -167,13 +180,11 @@ namespace HoloFastDepth
                 var val =(pix.v - min) / (max - min);
                 depthTexture.SetPixel(x, invY, new Color(val, val, val, 1.0f));
 
-                float u, v;
-                CalcSrcPos(srcSize, srcRoi, destSize, x, invY, out u, out v); // TODO 事前に計算できる
-                var camPos = ImageUtil.UnProjectVector(projMatrix, new Vector3(u * 2 - 1, v * 2 - 1, 1f)); // テクスチャ上のレンジ(0～1)を投影面上(-1～1)に変更
-      
-                camPos.Normalize();
-                var wldPos = camToWorldMatrix.MultiplyPoint(camPos * Convert.ToSingle(Math.Pow(pix.v, Coef)));
-                vertices[y * depthEstimator.InputWidth + x] = wldPos;
+                var worldPos = ImageUtil.screenPosToWorldPos(
+                    camToWorldMatrix, projMatrix,
+                    screenPos[y, x].x, screenPos[y, x].y,
+                    Convert.ToSingle(Math.Pow(pix.v, Coef)));
+                vertices[y * depthEstimator.InputWidth + x] = worldPos;
                 
             }
             depthTexture.Apply();

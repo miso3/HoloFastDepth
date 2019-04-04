@@ -2,8 +2,14 @@ using UnityEngine;
 
 namespace HoloFastDepth
 {
-    public class ImageUtil
+    public static class ImageUtil
     {
+        public static Vector3 screenPosToWorldPos(Matrix4x4 camToWorldMatrix, Matrix4x4 projMatrix, float screenX, float screenY, float depth)
+        {
+            var camPos = UnProjectVector(projMatrix, new Vector3(screenX * 2 - 1, screenY * 2 - 1, 1f)).normalized;
+            return camToWorldMatrix.MultiplyPoint(camPos * depth);
+        }
+        
         // from https://docs.microsoft.com/ja-jp/windows/mixed-reality/locatable-camera
         public static Vector3 UnProjectVector(Matrix4x4 proj, Vector3 to)
         {
