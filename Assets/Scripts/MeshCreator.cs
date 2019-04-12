@@ -42,8 +42,8 @@ namespace HoloFastDepth
 
         private float scaleHorizontalByCrop;
         private float scaleVerticalByCrop;
-        private float scaleHorizontalByResize;
-        private float scaleVerticalByResize;
+        //private float scaleHorizontalByResize;
+        //private float scaleVerticalByResize;
         
         // Use this for initialization
         void Start () {
@@ -105,8 +105,8 @@ namespace HoloFastDepth
             // 切り出しとリサイズによる内部パラメータ変更のための変数を計算しておく
             scaleHorizontalByCrop = CropWidth / Convert.ToSingle(cameraParameters.cameraResolutionWidth);
             scaleVerticalByCrop = CropHeight / Convert.ToSingle(cameraParameters.cameraResolutionHeight);
-            scaleHorizontalByResize = depthEstimator.InputWidth / Convert.ToSingle(CropWidth);
-            scaleVerticalByResize = depthEstimator.InputHeight / Convert.ToSingle(CropHeight);
+            //scaleHorizontalByResize = depthEstimator.InputWidth / Convert.ToSingle(CropWidth);
+            //scaleVerticalByResize = depthEstimator.InputHeight / Convert.ToSingle(CropHeight);
 
             // 何も無い場所をエアタップできるように GlobalListener へ登録
             InputManager.Instance.AddGlobalListener(gameObject);
@@ -180,7 +180,7 @@ namespace HoloFastDepth
             photoCaptureFrame.TryGetCameraToWorldMatrix(out camToWorldMatrix);
             photoCaptureFrame.TryGetProjectionMatrix(out projMatrix);
 
-            Matrix4x4 modifiedProjMatrix = ModifyProjectionMatrix(projMatrix);
+            //Matrix4x4 modifiedProjMatrix = ModifyProjectionMatrix(projMatrix);
 
             var min = depth.Min();
             var max = depth.Max();
@@ -193,7 +193,7 @@ namespace HoloFastDepth
                 depthTexture.SetPixel(x, invY, new Color(val, val, val, 1.0f));
 
                 var worldPos = ImageUtil.screenPosToWorldPos(
-                    camToWorldMatrix, modifiedProjMatrix,
+                    camToWorldMatrix, projMatrix,
                     screenPos[y, x].x, screenPos[y, x].y,
                     Convert.ToSingle(Math.Pow(pix.v, Coef)));
                 vertices[y * depthEstimator.InputWidth + x] = worldPos;
@@ -234,12 +234,11 @@ namespace HoloFastDepth
             var cx = projMatrix.m02;
             var cy = projMatrix.m12;
             Debug.Log($"fx = {fx}, fy = {fy}, cx = {cx}, cy = {cy}");
-
-            // fxよりfyの方が大きいのでY成分が長辺を表している気がする
-            fx *= scaleVerticalByCrop;
-            fy *= scaleHorizontalByCrop;
-            cx *= scaleVerticalByResize;
-            cy *= scaleHorizontalByResize;
+            
+            fx /= scaleHorizontalByCrop;
+            fy /= scaleVerticalByCrop;
+            cx /= scaleHorizontalByCrop;
+            cy /= scaleVerticalByCrop;
 
             var column0 = new Vector4(fx, 0, 0, 0);
             var column1 = new Vector4(0, fy, 0, 0);
