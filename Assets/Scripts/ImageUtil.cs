@@ -13,9 +13,10 @@ namespace HoloFastDepth
         public static Vector3 screenPosToWorldPos(Matrix4x4 camToWorldMatrix, Matrix4x4 projMatrix, float screenX, float screenY, float depth)
         {
             var camPos = UnProjectVector(projMatrix, new Vector3(screenX * 2 - 1, screenY * 2 - 1, 1f)).normalized;
+            camPos /= Mathf.Abs(camPos.z); // 奥行方向を-1にする
             return camToWorldMatrix.MultiplyPoint(camPos * depth);
         }
-        
+
         // from https://docs.microsoft.com/ja-jp/windows/mixed-reality/locatable-camera
         public static Vector3 UnProjectVector(Matrix4x4 proj, Vector3 to)
         {
@@ -40,7 +41,7 @@ namespace HoloFastDepth
                     var ur = y * width + x + 1;
                     var ll = (y + 1) * width + x;
                     var lr = (y + 1) * width + x + 1;
-                    
+
                     var offset = (y * (width - 1) + x) * 6;
 
                     triangles[offset + 0] = ll;
