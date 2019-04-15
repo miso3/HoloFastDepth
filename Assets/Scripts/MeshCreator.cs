@@ -19,9 +19,6 @@ namespace HoloFastDepth
         public int CropHeight = 1024;
 
         public string FastDepthOnnxModel;
-
-        // TODO ちゃんと合わせる
-        public float Coef = 1f;
   
         // TODO: PhotoCaptureは他のクラスに切り出した方が良いかも
         private PhotoCapture photoCapture;
@@ -39,11 +36,6 @@ namespace HoloFastDepth
         private float[] inputTensor;
         private int[] triangles;
         private Vector3[] vertices;
-
-        private float scaleHorizontalByCrop;
-        private float scaleVerticalByCrop;
-        //private float scaleHorizontalByResize;
-        //private float scaleVerticalByResize;
         
         // Use this for initialization
         void Start () {
@@ -101,12 +93,6 @@ namespace HoloFastDepth
                         out screenPos[y, x].x, out screenPos[y, x].y);
                 }
             }
-
-            // 切り出しとリサイズによる内部パラメータ変更のための変数を計算しておく
-            scaleHorizontalByCrop = CropWidth / Convert.ToSingle(cameraParameters.cameraResolutionWidth);
-            scaleVerticalByCrop = CropHeight / Convert.ToSingle(cameraParameters.cameraResolutionHeight);
-            //scaleHorizontalByResize = depthEstimator.InputWidth / Convert.ToSingle(CropWidth);
-            //scaleVerticalByResize = depthEstimator.InputHeight / Convert.ToSingle(CropHeight);
 
             // 何も無い場所をエアタップできるように GlobalListener へ登録
             InputManager.Instance.AddGlobalListener(gameObject);
@@ -180,8 +166,6 @@ namespace HoloFastDepth
             photoCaptureFrame.TryGetCameraToWorldMatrix(out camToWorldMatrix);
             photoCaptureFrame.TryGetProjectionMatrix(out projMatrix);
 
-            //Matrix4x4 modifiedProjMatrix = ModifyProjectionMatrix(projMatrix);
-
             var min = depth.Min();
             var max = depth.Max();
             foreach (var pix in depth.Select((v, i) => new { v, i }))
@@ -195,7 +179,7 @@ namespace HoloFastDepth
                 var worldPos = ImageUtil.screenPosToWorldPos(
                     camToWorldMatrix, projMatrix,
                     screenPos[y, x].x, screenPos[y, x].y,
-                    Convert.ToSingle(Math.Pow(pix.v, Coef)));
+                    pix.v);
                 vertices[y * depthEstimator.InputWidth + x] = worldPos;
                 
             }
@@ -214,41 +198,6 @@ namespace HoloFastDepth
             var tEnd = sw.ElapsedMilliseconds;
             Debug.Log(string.Format("Time\n  pic to tensor : {0}\n  pred : {1}\n  tensor to depth : {2}",
                 arg0: tConvTensor, arg1: tPred - tConvTensor, arg2: tEnd - tPred));
-        }
-
-        /// <summary>
-        /// 切り出しとリサイズによるprojection matrixの補正
-        /// </summary>
-        /// <param name="projMatrix"></param>
-        /// <returns></returns>
-        private Matrix4x4 ModifyProjectionMatrix(Matrix4x4 projMatrix) {
-            Debug.Log("Original projection matrix:");
-            Debug.Log(projMatrix);
-            // 1.52283 0.00000 -0.00518 0.00000
-            // 0.00000 2.70851  0.02438 0.00000
-            // 0.00000 0.00000 -1.00000 0.00000
-            // 0.00000 0.00000 -1.00000 0.00000
-
-            var fx = projMatrix.m00;
-            var fy = projMatrix.m11;
-            var cx = projMatrix.m02;
-            var cy = projMatrix.m12;
-            Debug.Log($"fx = {fx}, fy = {fy}, cx = {cx}, cy = {cy}");
-            
-            fx /= scaleHorizontalByCrop;
-            fy /= scaleVerticalByCrop;
-            cx /= scaleHorizontalByCrop;
-            cy /= scaleVerticalByCrop;
-
-            var column0 = new Vector4(fx, 0, 0, 0);
-            var column1 = new Vector4(0, fy, 0, 0);
-            var column2 = new Vector4(cx, cy, -1, -1);
-            
-            var modifiedProjMatrix = new Matrix4x4(column0, column1, column2, Vector4.zero);
-            Debug.Log("Modified projection matrix:");
-            Debug.Log(modifiedProjMatrix);
-
-            return modifiedProjMatrix;
         }
 
         private void OnStoppedPhotoMode(PhotoCapture.PhotoCaptureResult result)
