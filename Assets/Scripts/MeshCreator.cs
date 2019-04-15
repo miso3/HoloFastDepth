@@ -14,9 +14,9 @@ namespace HoloFastDepth
 
         public GameObject DepthView;
         
-        public int CropWidth = 1024;
+        public int CropWidth = 1536;
         
-        public int CropHeight = 1024;
+        public int CropHeight = 1152;
 
         public string FastDepthOnnxModel;
   
@@ -89,7 +89,7 @@ namespace HoloFastDepth
                 for (var x = 0; x < depthEstimator.InputWidth; ++x)
                 {
                     var invY = depthEstimator.InputHeight - y - 1;
-                    CalcSrcPos(srcSize, srcRoi, destSize, x, invY,
+                    ImageUtil.CalcSrcPos(srcSize, srcRoi, destSize, x, invY,
                         out screenPos[y, x].x, out screenPos[y, x].y);
                 }
             }
@@ -207,11 +207,7 @@ namespace HoloFastDepth
             photoCapture = null;
         }
         
-        void CalcSrcPos(Vector2 srcSize, Rect srcRoi, Vector2 destSize, int destX, int destY, out float srcU, out float srcV) 
-        {
-            srcU = destX / (destSize.x - 1) * (srcRoi.width - 1) / (srcSize.x - 1) + srcRoi.x / (srcSize.x - 1);
-            srcV = destY / (destSize.y - 1) * (srcRoi.height - 1) / (srcSize.y - 1) + srcRoi.y / (srcSize.y - 1);
-        }
+  
 
         void SetTexture(GameObject target, Texture2D texture)
         {

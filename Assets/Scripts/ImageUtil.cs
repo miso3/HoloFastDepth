@@ -4,6 +4,12 @@ namespace HoloFastDepth
 {
     public static class ImageUtil
     {
+        public static void CalcSrcPos(Vector2 srcSize, Rect srcRoi, Vector2 destSize, int destX, int destY, out float srcU, out float srcV)
+        {
+            srcU = destX / (destSize.x - 1) * (srcRoi.width - 1) / (srcSize.x - 1) + srcRoi.x / (srcSize.x - 1);
+            srcV = destY / (destSize.y - 1) * (srcRoi.height - 1) / (srcSize.y - 1) + srcRoi.y / (srcSize.y - 1);
+        }
+
         public static Vector3 screenPosToWorldPos(Matrix4x4 camToWorldMatrix, Matrix4x4 projMatrix, float screenX, float screenY, float depth)
         {
             var camPos = UnProjectVector(projMatrix, new Vector3(screenX * 2 - 1, screenY * 2 - 1, 1f));
