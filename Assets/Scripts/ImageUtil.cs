@@ -12,7 +12,7 @@ namespace HoloFastDepth
 
         public static Vector3 screenPosToWorldPos(Matrix4x4 camToWorldMatrix, Matrix4x4 projMatrix, float screenX, float screenY, float depth)
         {
-            var camPos = UnProjectVector(projMatrix, new Vector3(screenX * 2 - 1, screenY * 2 - 1, 1f)).normalized;
+            var camPos = UnProjectVector(projMatrix, new Vector3(screenX * 2 - 1, screenY * 2 - 1, 1f));
             camPos /= Mathf.Abs(camPos.z); // 奥行方向を-1にする
             return camToWorldMatrix.MultiplyPoint(camPos * depth);
         }
